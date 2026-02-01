@@ -1,1 +1,1 @@
-RUST_LOG=info cargo watch -x "run --profile dev" -x check -x test -x run
+RUST_LOG=trace cargo watch -x "run --profile dev" -x check -x test -x run
