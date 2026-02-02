@@ -1,7 +1,24 @@
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::net::TcpListener;
+use std::sync::LazyLock;
+use secrecy::{ExposeSecret, SecretString};
 use uuid::Uuid;
 use zero2prod::configuration::{DatabaseSettings, get_configuration};
+use zero2prod::telemetry::{get_subscriber, init_subscriber};
+
+static TRACING: LazyLock<()> = LazyLock::new(|| {
+    let default_filter_level = "info".to_string();
+
+    let subscriber_name = "test".to_string();
+
+    if std::env::var("TEST_LOG").is_ok() {
+        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::stdout);
+        init_subscriber(subscriber);
+    } else {
+        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::sink);
+        init_subscriber(subscriber);
+    }
+});
 
 pub struct TestApp {
     pub address: String,
@@ -9,13 +26,14 @@ pub struct TestApp {
 }
 
 async fn spawn_app() -> TestApp {
+    LazyLock::force(&TRACING);
+
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
     let address = format!("http://127.0.0.1:{}", port);
 
     let mut configuration = get_configuration().expect("Failed to read configuration");
     configuration.database.database_name = Uuid::new_v4().to_string();
-
     let connection_pool = configure_database(&configuration.database).await;
 
     let server =
@@ -32,11 +50,11 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
     let maintenance_settings = DatabaseSettings {
         database_name: "postgres".to_string(),
         username: "postgress".to_string(),
-        password: "password".to_string(),
+        password: SecretString::new("password".into()),
         ..config.clone()
     };
 
-    let mut connection = PgConnection::connect(&maintenance_settings.connection_string())
+    let mut connection = PgConnection::connect(maintenance_settings.connection_string().expose_secret())
         .await
         .expect("Failed to connect to database");
 
@@ -47,19 +65,20 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
 
     let mut maintenance_settings = maintenance_settings.clone();
     maintenance_settings.database_name = config.database_name.clone();
-    let mut maintenance_connection = PgConnection::connect(&maintenance_settings.connection_string())
-        .await
-        .expect("Failed to connect to database");
+    let mut maintenance_connection =
+        PgConnection::connect(maintenance_settings.connection_string().expose_secret())
+            .await
+            .expect("Failed to connect to database");
 
     sqlx::query(&format!(
         r#"GRANT ALL ON SCHEMA public TO "{}";"#,
         config.username
     ))
-        .execute(&mut maintenance_connection)
-        .await
-        .expect("Failed to grant permissions on schema public");
+    .execute(&mut maintenance_connection)
+    .await
+    .expect("Failed to grant permissions on schema public");
 
-    let connection_pool = PgPool::connect(&config.connection_string())
+    let connection_pool = PgPool::connect(config.connection_string().expose_secret())
         .await
         .expect("Failed to connect to database");
 
