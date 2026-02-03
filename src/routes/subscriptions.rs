@@ -2,6 +2,7 @@ use actix_web::{HttpResponse, web};
 use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
+use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(serde::Deserialize, Debug)]
 pub struct FormData {
@@ -18,6 +19,9 @@ pub struct FormData {
     )
 )]
 pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> HttpResponse {
+    if !is_valid_name(&form.name) {
+        return HttpResponse::BadRequest().finish();
+    }
     match save_subscription(&form, &pool).await {
         Ok(_) => HttpResponse::Ok().finish(),
         Err(e) => {
