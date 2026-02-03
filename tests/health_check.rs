@@ -54,7 +54,7 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
         ..config.clone()
     };
 
-    let mut connection = PgConnection::connect(maintenance_settings.connection_string().expose_secret())
+    let mut connection = PgConnection::connect_with(&maintenance_settings.connect_options())
         .await
         .expect("Failed to connect to database");
 
@@ -66,7 +66,7 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
     let mut maintenance_settings = maintenance_settings.clone();
     maintenance_settings.database_name = config.database_name.clone();
     let mut maintenance_connection =
-        PgConnection::connect(maintenance_settings.connection_string().expose_secret())
+        PgConnection::connect_with(&maintenance_settings.connect_options())
             .await
             .expect("Failed to connect to database");
 
