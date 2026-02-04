@@ -6,14 +6,8 @@ use uuid::Uuid;
 
 #[derive(serde::Deserialize, Debug)]
 pub struct FormData {
-    email: String,
-    name: String,
-}
-
-pub fn parse_subscriber(form: FormData) -> Result<NewSubscriber, String> {
-    let name = SubscriberName::parse(form.name)?;
-    let email = SubscriberEmail::parse(form.email)?;
-    Ok(NewSubscriber { name, email })
+   pub email: String,
+    pub name: String,
 }
 
 #[tracing::instrument(
@@ -25,7 +19,7 @@ pub fn parse_subscriber(form: FormData) -> Result<NewSubscriber, String> {
     )
 )]
 pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> HttpResponse {
-    let new_subscriber = match parse_subscriber(form.0) {
+    let new_subscriber = match form.0.try_into() {
         Ok(subscriber) => subscriber,
         Err(e) => return HttpResponse::BadRequest().body(e),
     };

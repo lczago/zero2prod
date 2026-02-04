@@ -2,3 +2,6 @@ application:
   host: 0.0.0.0
 database:
   require_ssl: false
+sender_email:
+  base_url: http://localhost:3000
+  sender_email: test@example.com

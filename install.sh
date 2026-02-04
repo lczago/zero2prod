@@ -17,3 +17,7 @@ cargo install cargo-llvm-cov
 cargo install cargo-audit
 rustup component add clippy
 rustup component add rustfmt
+cargo install sqlx-cli --no-default-features --features rustls,postgres
+
+#CREATE USER app WITH PASSWORD 'secret';
+#ALTER USER app CREATEDB;
