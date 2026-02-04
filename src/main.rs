@@ -13,11 +13,18 @@ async fn main() -> Result<(), std::io::Error> {
     let configuration = get_configuration().expect("Failed to read configuration");
     let connection_pool = PgPool::connect_lazy_with(configuration.database.connect_options());
 
+    let timeout = configuration.email_client.timeout();
+
     let sender_email = configuration
         .email_client
         .sender()
         .expect("Failed to parse sender email");
-    let email_client = EmailClient::new(configuration.email_client.base_url, sender_email);
+    let email_client = EmailClient::new(
+        configuration.email_client.base_url,
+        sender_email,
+        configuration.email_client.authorization_token,
+        timeout,
+    );
 
     let address = format!(
         "{}:{}",
