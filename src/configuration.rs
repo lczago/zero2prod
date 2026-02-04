@@ -1,7 +1,6 @@
 use secrecy::{ExposeSecret, SecretString};
 use serde_aux::field_attributes::deserialize_number_from_string;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
-use unicode_segmentation::UnicodeSegmentation;
 
 pub enum Environment {
     Local,
@@ -64,7 +63,6 @@ pub fn get_configuration() -> Result<Settings, config::ConfigError> {
 
     settings.try_deserialize::<Settings>()
 }
-
 
 #[derive(serde::Deserialize)]
 pub struct ApplicationSettings {

@@ -1,14 +1,19 @@
-use crate::domain::{NewSubscriber, SubscriberName, insert_subscriber};
+use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 use actix_web::{HttpResponse, web};
 use chrono::Utc;
 use sqlx::PgPool;
-use unicode_segmentation::UnicodeSegmentation;
 use uuid::Uuid;
 
 #[derive(serde::Deserialize, Debug)]
 pub struct FormData {
     email: String,
     name: String,
+}
+
+pub fn parse_subscriber(form: FormData) -> Result<NewSubscriber, String> {
+    let name = SubscriberName::parse(form.name)?;
+    let email = SubscriberEmail::parse(form.email)?;
+    Ok(NewSubscriber { name, email })
 }
 
 #[tracing::instrument(
@@ -20,16 +25,34 @@ pub struct FormData {
     )
 )]
 pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> HttpResponse {
-    let new_subscriber = NewSubscriber {
-        email: form.0.email,
-        name: SubscriberName::parse(form.0.name),
+    let new_subscriber = match parse_subscriber(form.0) {
+        Ok(subscriber) => subscriber,
+        Err(e) => return HttpResponse::BadRequest().body(e),
     };
 
     match insert_subscriber(&pool, &new_subscriber).await {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(e) => {
-            tracing::error!("Failed to execute query: {:?}", e);
-            HttpResponse::InternalServerError().finish()
-        }
+        Err(_) => HttpResponse::InternalServerError().finish(),
     }
+}
+
+#[tracing::instrument(name = "Saving new subscriber details in the database", skip(pool))]
+pub async fn insert_subscriber(
+    pool: &PgPool,
+    new_subscriber: &NewSubscriber,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "INSERT INTO subscriptions (id, email, name, subscribed_at) VALUES ($1, $2, $3, $4)",
+        Uuid::new_v4(),
+        new_subscriber.email.as_ref(),
+        new_subscriber.name.as_ref(),
+        Utc::now()
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to execute query: {:?}", e);
+        e
+    })?;
+    Ok(())
 }

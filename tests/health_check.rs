@@ -1,4 +1,4 @@
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::{SecretString};
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::net::TcpListener;
 use std::sync::LazyLock;
@@ -78,7 +78,7 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
     .await
     .expect("Failed to grant permissions on schema public");
 
-    let connection_pool = PgPool::connect(config.connection_string().expose_secret())
+    let connection_pool = PgPool::connect_with(config.connect_options())
         .await
         .expect("Failed to connect to database");
 
@@ -171,7 +171,7 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
 }
 
 #[tokio::test]
-async fn subscribe_returns_a_200_when_fields_are_present_but_empty() {
+async fn subscribe_returns_a_400_when_fields_are_present_but_empty() {
     // Arrange
     let app = spawn_app().await;
     let client = reqwest::Client::new();
@@ -196,9 +196,9 @@ async fn subscribe_returns_a_200_when_fields_are_present_but_empty() {
 
         // Assert
         assert_eq!(
-            200,
+            400,
             response.status().as_u16(),
-            "The API failed with 200 OK when the payload was {}.",
+            "The API failed with 400 OK when the payload was {}.",
             description
         );
     }
