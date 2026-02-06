@@ -34,10 +34,10 @@ async fn subscribe_persist_the_new_subscriber() {
         .respond_with(ResponseTemplate::new(200))
         .mount(&app.email_server)
         .await;
-    
+
     // Act
     app.post_subscriptions(body.into()).await;
-    
+
     // Assert
     let saved = sqlx::query!("SELECT email, name, status FROM subscriptions",)
         .fetch_one(&app.db_pool)
@@ -128,7 +128,7 @@ async fn subscribe_sends_a_confirmation_email_for_valid_data() {
             .links(s)
             .filter(|l| *l.kind() == linkify::LinkKind::Url)
             .collect();
-        assert_eq!(s.len(), 1);
+        assert_eq!(links.len(), 1);
         links[0].as_str().to_owned()
     };
 
@@ -136,4 +136,25 @@ async fn subscribe_sends_a_confirmation_email_for_valid_data() {
     let text_link = get_link(body["TextBody"].as_str().unwrap());
 
     assert_eq!(html_link, text_link)
+}
+
+#[tokio::test]
+async fn subscribe_sends_a_confirmation_email_with_a_link() {
+    // Arrange
+    let app = spawn_app().await;
+    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.email_server)
+        .await;
+
+    // Act
+    app.post_subscriptions(body.into()).await;
+
+    // Assert
+    let email_request = &app.email_server.received_requests().await.unwrap()[0];
+    let confirmation_links = app.get_confirmations_links(email_request);
+    assert_eq!(confirmation_links.html.path(), "/subscriptions/confirm");
 }
