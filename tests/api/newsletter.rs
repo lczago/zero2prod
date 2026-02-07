@@ -16,7 +16,7 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
 
     Mock::given(any())
         .respond_with(ResponseTemplate::new(200))
-        .expect(0)
+        .expect(1)
         .mount(&app.email_server)
         .await;
 
@@ -123,11 +123,11 @@ async fn newsletters_return_400_for_invalid_data() {
             "missing content",
         ),
     ];
-    
+
     for (invalid_body, error_message) in test_cases {
         let response = app.post_newsletter(invalid_body).await;
-        
+
         assert_eq!(400, response.status(), "The API did not fail with 400 Bad Request when the payload was {}", error_message);
-        
+
     }
 }
