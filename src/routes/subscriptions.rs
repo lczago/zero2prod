@@ -1,5 +1,6 @@
 use crate::domain::NewSubscriber;
 use crate::email_client::EmailClient;
+use crate::routes::error_chain_fmt;
 use crate::startup::ApplicationBaseUrl;
 use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, ResponseError, web};
@@ -107,7 +108,7 @@ pub async fn send_confirmation_email(
 
     email_client
         .send_email(
-            new_subscriber.email,
+            &new_subscriber.email,
             "Welcome!",
             &format!(
                 "\
@@ -145,13 +146,10 @@ pub async fn store_token(
         subscription_token,
         subscriber_id
     );
-    transaction
-        .execute(query)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to execute query: {:?}", e);
-            StoreTokenError(e)
-        })?;
+    transaction.execute(query).await.map_err(|e| {
+        tracing::error!("Failed to execute query: {:?}", e);
+        StoreTokenError(e)
+    })?;
 
     Ok(())
 }
@@ -174,19 +172,6 @@ impl std::error::Error for StoreTokenError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.0)
     }
-}
-
-fn error_chain_fmt(
-    e: &impl std::error::Error,
-    f: &mut std::fmt::Formatter<'_>,
-) -> std::fmt::Result {
-    writeln!(f, "{}\n", e)?;
-    let mut current = e.source();
-    while let Some(cause) = current {
-        writeln!(f, "Caused by:\n\t{}", cause)?;
-        current = cause.source();
-    }
-    Ok(())
 }
 
 #[derive(Error)]
