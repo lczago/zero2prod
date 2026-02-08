@@ -1,17 +1,15 @@
 use crate::authentication::{AuthError, Credentials, validate_credentials};
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
-use crate::telemetry::spawn_blocking_with_tracing;
 use actix_web::http::header::HeaderMap;
 use actix_web::web::Json;
 use actix_web::{HttpRequest, HttpResponse, web};
 use anyhow::Context;
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
+use argon2::{PasswordVerifier};
 use base64::Engine;
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::{SecretString};
 use serde::Deserialize;
 use sqlx::PgPool;
-use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct BodyData {
