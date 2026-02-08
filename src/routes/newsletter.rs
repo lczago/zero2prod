@@ -7,7 +7,7 @@ use actix_web::http::{StatusCode, header};
 use actix_web::web::Json;
 use actix_web::{HttpRequest, HttpResponse, ResponseError, web};
 use anyhow::Context;
-use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordVerifier, Version};
+use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use base64::Engine;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
@@ -170,19 +170,22 @@ async fn validate_credentials(
     credentials: Credentials,
     pool: &PgPool,
 ) -> Result<Uuid, PublishError> {
-    let (user_id, expected_password_hash) = get_stored_credentials(&credentials.username, pool)
+    let stored = get_stored_credentials(&credentials.username, pool)
         .await
-        .map_err(PublishError::AuthError)?
-        .ok_or_else(|| anyhow::anyhow!("No credentials found for user {}", credentials.username))?;
+        .map_err(PublishError::UnexpectedError)?;
 
-    spawn_blocking_with_tracing(move || {
-        verify_password_hash(expected_password_hash, credentials.password)
-    })
-    .await
-    .context("Failed to spawn blocking task")
-    .map_err(PublishError::UnexpectedError)??;
+    let mut user_id = None;
+    if let Some((stored_user_id, expected_password_hash)) = stored {
+        user_id = Some(stored_user_id);
+        spawn_blocking_with_tracing(move || {
+            verify_password_hash(expected_password_hash, credentials.password)
+        })
+        .await
+        .context("Failed to spawn blocking task")
+        .map_err(PublishError::UnexpectedError)??;
+    }
 
-    Ok(user_id)
+    user_id.ok_or_else(|| PublishError::AuthError(anyhow::anyhow!("Invalid username.")))
 }
 
 #[tracing::instrument(
