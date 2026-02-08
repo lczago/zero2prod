@@ -1,10 +1,13 @@
+use argon2::password_hash::SaltString;
+use argon2::password_hash::rand_core::OsRng;
+use argon2::{Argon2, PasswordHasher};
 use secrecy::SecretString;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::sync::LazyLock;
 use uuid::Uuid;
 use wiremock::MockServer;
-use zero2prod::configuration::{get_configuration, DatabaseSettings};
-use zero2prod::startup::{get_connection_pool, Application};
+use zero2prod::configuration::{DatabaseSettings, get_configuration};
+use zero2prod::startup::{Application, get_connection_pool};
 use zero2prod::telemetry::{get_subscriber, init_subscriber};
 
 static TRACING: LazyLock<()> = LazyLock::new(|| {
@@ -26,11 +29,46 @@ pub struct ConfirmationLinks {
     pub plain_text: reqwest::Url,
 }
 
+pub struct TestUser {
+    pub user_id: Uuid,
+    pub username: String,
+    pub password: String,
+}
+
+impl TestUser {
+    pub fn generate() -> Self {
+        Self {
+            user_id: Uuid::new_v4(),
+            username: Uuid::new_v4().to_string(),
+            password: Uuid::new_v4().to_string(),
+        }
+    }
+
+    async fn store(&self, pool: &PgPool) {
+        let salt = SaltString::generate(&mut OsRng);
+        let password_hash = Argon2::default()
+            .hash_password(self.password.as_bytes(), &salt)
+            .unwrap()
+            .to_string();
+
+        sqlx::query!(
+            r#"INSERT INTO users (user_id, username, password_hash) VALUES ($1, $2, $3)"#,
+            self.user_id,
+            self.username,
+            password_hash
+        )
+        .execute(pool)
+        .await
+        .expect("Failed to store test user");
+    }
+}
+
 pub struct TestApp {
     pub address: String,
     pub db_pool: PgPool,
     pub email_server: MockServer,
     pub port: u16,
+    test_user: TestUser,
 }
 
 impl TestApp {
@@ -65,14 +103,23 @@ impl TestApp {
 
         ConfirmationLinks { html, plain_text }
     }
-    
+
     pub async fn post_newsletter(&self, body: serde_json::Value) -> reqwest::Response {
         reqwest::Client::new()
             .post(format!("{}/newsletter", &self.address))
+            .basic_auth(&self.test_user.username, Some(&self.test_user.password))
             .json(&body)
             .send()
             .await
             .expect("Failed to execute request.")
+    }
+
+    pub async fn test_user(&self) -> (String, String) {
+        let row = sqlx::query!(r#"SELECT username, password_hash FROM users LIMIT 1"#)
+            .fetch_one(&self.db_pool)
+            .await
+            .expect("Failed to fetch test user");
+        (row.username, row.password_hash)
     }
 }
 
@@ -100,12 +147,15 @@ pub async fn spawn_app() -> TestApp {
 
     let _ = tokio::spawn(application.run_until_stopped());
 
-    TestApp {
+    let test_app = TestApp {
         port: application_port,
         db_pool: get_connection_pool(&configuration.database),
         address,
         email_server,
-    }
+        test_user: TestUser::generate(),
+    };
+    test_app.test_user.store(&test_app.db_pool).await;
+    test_app
 }
 
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {

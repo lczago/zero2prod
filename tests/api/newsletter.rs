@@ -127,7 +127,37 @@ async fn newsletters_return_400_for_invalid_data() {
     for (invalid_body, error_message) in test_cases {
         let response = app.post_newsletter(invalid_body).await;
 
-        assert_eq!(400, response.status(), "The API did not fail with 400 Bad Request when the payload was {}", error_message);
-
+        assert_eq!(
+            400,
+            response.status(),
+            "The API did not fail with 400 Bad Request when the payload was {}",
+            error_message
+        );
     }
+}
+
+#[tokio::test]
+async fn requests_missing_authorization_are_rejected() {
+    // Arrange
+    let app = spawn_app().await;
+
+    let response = reqwest::Client::new()
+        .post(format!("{}/newsletter", app.address))
+        .json(&serde_json::json!({
+            "title": "Newsletter title",
+            "content": {
+                "text": "Newsletter body as plain text",
+                "html": "<p>Newsletter body as HTML</p>"
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Assert
+    assert_eq!(response.status(), 401);
+    assert_eq!(
+        r#"Basic realm="publish""#,
+        response.headers()["WWW-Authenticate"]
+    );
 }
