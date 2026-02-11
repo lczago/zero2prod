@@ -30,7 +30,7 @@ impl EmailClient {
 
     pub async fn send_email(
         &self,
-        recipient: SubscriberEmail,
+        recipient: &SubscriberEmail,
         subject: &str,
         html_content: &str,
         text_content: &str,
@@ -40,8 +40,8 @@ impl EmailClient {
             from: self.sender.as_ref(),
             to: recipient.as_ref(),
             subject,
-            html_content,
-            text_content,
+            html_body: html_content,
+            text_body: text_content,
         };
 
         self.http_client
@@ -65,8 +65,8 @@ struct SendEmailRequest<'a> {
     from: &'a str,
     to: &'a str,
     subject: &'a str,
-    html_content: &'a str,
-    text_content: &'a str,
+    html_body: &'a str,
+    text_body: &'a str,
 }
 
 #[cfg(test)]
@@ -92,8 +92,8 @@ mod tests {
                 body.get("From").is_some()
                     && body.get("To").is_some()
                     && body.get("Subject").is_some()
-                    && body.get("HtmlContent").is_some()
-                    && body.get("TextContent").is_some()
+                    && body.get("HtmlBody").is_some()
+                    && body.get("TextBody").is_some()
             } else {
                 false
             }
@@ -135,7 +135,7 @@ mod tests {
 
         // Act
         let outcome = email_client
-            .send_email(email(), &subject(), &content(), &content())
+            .send_email(&email(), &subject(), &content(), &content())
             .await;
 
         // Assert
@@ -158,7 +158,7 @@ mod tests {
 
         // Act
         let outcome = email_client
-            .send_email(email(), &subject(), &content(), &content())
+            .send_email(&email(), &subject(), &content(), &content())
             .await;
 
         // Assert
